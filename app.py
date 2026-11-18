@@ -1,5 +1,5 @@
 """
-Skrining Risiko Anemia Mahasiswa — versi Streamlit
+Anemi-Check: Skrining Risiko Anemia Mahasiswa — versi Streamlit
 Data disimpan lewat Google Apps Script (Code.gs) ke Google Sheets.
 
 Secrets (.streamlit/secrets.toml atau menu Secrets di Streamlit Cloud):
@@ -21,7 +21,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components  # dipakai hanya bila st.iframe belum ada
 
-st.set_page_config(page_title="Skrining Risiko Anemia Mahasiswa", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="Anemi-Check · Skrining Risiko Anemia", page_icon="🩺", layout="wide")
 
 TZ = ZoneInfo("Asia/Makassar")
 
@@ -480,15 +480,15 @@ def atur_lebar(px):
 
 
 def topbar(judul):
-    htm(f"""<div class='brand'><img src='{LOGO}' alt=''><div><div class='brand-nama'>Skrining Risiko Anemia</div>
-        <div class='brand-sub'>Mahasiswa · Kesehatan Masyarakat</div></div>
+    htm(f"""<div class='brand'><img src='{LOGO}' alt=''><div><div class='brand-nama'>Anemi-Check</div>
+        <div class='brand-sub'>Skrining Risiko Anemia Mahasiswa</div></div>
         <div class='brand-hal'>{html.escape(judul)}</div></div>""")
 
 
 def panel(ilus, label, judul, isi, chips=()):
     chip = "".join(f"<span class='chip'>{c}</span>" for c in chips)
-    htm(f"""<div class='panel'><div class='panel-brand'><img src='{LOGO}' alt=''><div><b>Skrining Risiko Anemia</b>
-        <span>Mahasiswa · Kesehatan Masyarakat</span></div></div><div><span class='panel-label'>{label}</span></div><div class='panel-judul'>{judul}</div>
+    htm(f"""<div class='panel'><div class='panel-brand'><img src='{LOGO}' alt=''><div><b>Anemi-Check</b>
+        <span>Skrining Risiko Anemia Mahasiswa</span></div></div><div><span class='panel-label'>{label}</span></div><div class='panel-judul'>{judul}</div>
         <div class='panel-isi'>{isi}</div><div class='chips'>{chip}</div>
         <img class='panel-img' src='{svg_uri(ILUS[ilus])}' alt=''></div>""")
 
@@ -788,7 +788,7 @@ def tampil_hasil(h, a, kode, baru, waktu=None):
         pengingat = list(PENGINGAT[h["level"]])
         if h["segera"]:
             pengingat.insert(0, {"label": "Ingatkan periksa ke faskes (besok)", "judul": "Segera periksa ke fasilitas kesehatan", "hari": 1})
-        detail = ("Pengingat dari aplikasi Skrining Risiko Anemia.\nHasil: " + t["label"]
+        detail = ("Pengingat dari aplikasi Anemi-Check.\nHasil: " + t["label"]
                   + (f"\nKode responden: {kode}" if kode else "")
                   + "\nTunjukkan hasil skrining ini kepada petugas kesehatan.")
         kol = st.columns(len(pengingat))
