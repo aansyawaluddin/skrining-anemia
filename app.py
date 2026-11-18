@@ -310,6 +310,11 @@ html,body,.stApp,button,input,textarea,select,p,li,label,h1,h2,h3,h4,h5,h6,[data
 .stApp{background:radial-gradient(900px 520px at 0% -10%,#DDF2F1 0,transparent 60%),radial-gradient(760px 460px at 100% 0%,#FDE9E9 0,transparent 60%),#F6FAFA;}
 [data-testid="stHeader"]{background:transparent;}
 #MainMenu,footer{visibility:hidden;}
+[data-testid="stElementContainer"]:has(style){display:none;}
+.panel-brand{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:relative;}
+.panel-brand img{width:38px;height:38px;border-radius:11px;box-shadow:0 4px 12px rgba(0,0,0,.15);}
+.panel-brand b{font-size:1rem;}
+.panel-brand span{display:block;font-size:.72rem;opacity:.8;}
 .block-container,[data-testid="stMainBlockContainer"]{max-width:1080px;padding-top:4.5rem !important;padding-bottom:1.5rem !important;}
 h1,h2,h3{color:var(--ink);letter-spacing:-.02em;}
 .brand{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:18px;padding:10px 14px;box-shadow:0 6px 20px rgba(14,124,134,.06);margin-bottom:22px;}
@@ -481,7 +486,8 @@ def topbar(judul):
 
 def panel(ilus, label, judul, isi, chips=()):
     chip = "".join(f"<span class='chip'>{c}</span>" for c in chips)
-    htm(f"""<div class='panel'><div class='panel-label'>{label}</div><div class='panel-judul'>{judul}</div>
+    htm(f"""<div class='panel'><div class='panel-brand'><img src='{LOGO}' alt=''><div><b>Skrining Risiko Anemia</b>
+        <span>Mahasiswa · Kesehatan Masyarakat</span></div></div><div><span class='panel-label'>{label}</span></div><div class='panel-judul'>{judul}</div>
         <div class='panel-isi'>{isi}</div><div class='chips'>{chip}</div>
         <img class='panel-img' src='{svg_uri(ILUS[ilus])}' alt=''></div>""")
 
@@ -503,7 +509,22 @@ def kartu(nama):
     return st.container(border=True, key=f"kartu_{nama}")
 
 
+SATU_LAYAR = """<style>
+@media (min-width:900px){
+.block-container,[data-testid='stMainBlockContainer']{padding-top:3.6rem !important;padding-bottom:.6rem !important;}
+.panel{height:calc(100vh - 4.6rem);min-height:440px;display:flex;flex-direction:column;padding:24px 30px 14px;}
+.panel-judul{font-size:clamp(1.45rem,3.6vh,2.05rem);margin:10px 0 8px;}
+.panel-isi{font-size:.93rem;line-height:1.55;}
+.chips{margin-top:12px;}
+.panel-img{flex:1 1 0;min-height:0;width:100%;max-width:none;object-fit:contain;margin:8px auto 0;}
+.kaki{display:none;}
+}
+</style>"""
+
+
 def split():
+    """Dua kolom (ilustrasi | form) yang muat satu layar di desktop."""
+    htm(SATU_LAYAR)
     return st.columns([1.05, 1], gap="large", vertical_alignment="center")
 
 
@@ -526,7 +547,6 @@ def kembali_asal():
 # 6. HALAMAN
 # =========================================================
 def halaman_home():
-    topbar("Beranda")
     kiri, kanan = split()
     with kiri:
         panel("home", "Skrining mandiri", "Kenali risiko anemia lebih dini",
@@ -535,7 +555,7 @@ def halaman_home():
     with kanan, kartu("home"):
         judul_kartu("Mulai skrining 👋", "Ini skrining risiko, <b>bukan diagnosis</b>. Hasil dan saran tindak lanjut "
                     "langsung tampil di akhir.")
-        with st.expander("📄 Baca lembar persetujuan (informed consent)", expanded=False):
+        with st.expander("📄 Lembar persetujuan (informed consent)", expanded=False):
             st.write("Kamu diajak mengisi kuesioner skrining risiko anemia untuk keperluan tugas akhir/penelitian. "
                      "Sebelum mulai, mohon pahami hal berikut:")
             st.markdown(
@@ -547,15 +567,16 @@ def halaman_home():
         if tombol("Mulai skrining  →", "mulai", "primary", disabled=not ss.consent):
             ke("form", step=0, errors={})
         htm("<div class='pemisah'>atau</div>")
-        k1, k2 = st.columns(2)
+        k1, k2, k3 = st.columns(3)
         with k1:
-            if tombol("🕘 Riwayat hasil", "ke_riwayat"):
+            if tombol("🕘 Riwayat", "ke_riwayat"):
                 ke("riwayat", asal="", rw={"kode": "", "status": "", "data": None, "pesan": ""})
         with k2:
-            if tombol("🏥 Layanan kesehatan", "ke_faskes"):
+            if tombol("🏥 Layanan", "ke_faskes"):
                 ke("faskes", asal="home")
-        if tombol("🥗 Tips gizi cegah anemia", "ke_tips"):
-            ke("tips", asal="home")
+        with k3:
+            if tombol("🥗 Tips gizi", "ke_tips"):
+                ke("tips", asal="home")
 
 
 def langkah_aktif():
@@ -907,7 +928,6 @@ def cari_riwayat(kode):
 
 
 def halaman_riwayat():
-    topbar("Riwayat Hasil")
     rw = ss.rw
     if not rw["kode"]:
         rw["kode"] = (ss.payload or {}).get("kode") or ss.get("kode_terakhir", "")
@@ -973,7 +993,6 @@ def halaman_admin():
     adm = ss.setdefault("adm", {"status": "", "pesan": "", "data": None, "pin": ""})
 
     if adm["status"] != "ok":
-        topbar("Petugas")
         kiri, kanan = split()
         with kiri:
             panel("admin", "Khusus petugas", "Dasbor rekap skrining anemia",
