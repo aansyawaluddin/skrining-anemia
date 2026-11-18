@@ -36,6 +36,13 @@ def _perempuan(a):
     return a.get("jk") == "Perempuan"
 
 
+def _pernah_hb(a):
+    """Pertanyaan hasil Hb tampil bila pernah diperiksa. Data riwayat lama (tanpa q25_pernah) tetap dihitung."""
+    if "q25_pernah" in a:
+        return a["q25_pernah"] == "Ya"
+    return a.get("q25") not in (None, "", "Belum pernah", "Tidak berlaku")
+
+
 SECTIONS = [
     {
         "id": "data", "title": "Data Responden",
@@ -91,7 +98,7 @@ SECTIONS = [
         ],
     },
     {
-        "id": "ttd", "title": "Tablet Tambah Darah (TTD) dan Pemeriksaan Hb",
+        "id": "ttd", "title": "Konsumsi TTD dan Suplemen",
         "q": [
             # Skor gabungan no. 23–24: 1 poin bila tidak pernah minum TTD atau minum tetapi tidak rutin
             {"id": "q23", "no": 23, "text": "Apakah kamu pernah mendapat atau mengonsumsi Tablet Tambah Darah (TTD)?",
@@ -99,10 +106,12 @@ SECTIONS = [
              "factor": lambda a: "Belum pernah minum TTD" if a.get("q23") == "Tidak" else "Minum TTD tidak rutin", "changeable": True},
             {"id": "q24", "no": 24, "text": "Apakah TTD dikonsumsi rutin 1 tablet per minggu?", "options": ["Ya, rutin", "Kadang-kadang", "Tidak"],
              "show": lambda a: a.get("q23") == "Ya"},
-            {"id": "q25", "no": 25, "text": "Apakah kamu pernah diperiksa kadar Hb sebelumnya? Bagaimana hasilnya?",
-             "options": ["Belum pernah", "Normal", "Anemia", "Tidak tahu hasilnya"], "score": {"Anemia": 2}, "factor": "Hasil Hb sebelumnya anemia"},
+            # No. 25 dipecah: pernah diperiksa? → kapan → bagaimana hasilnya (disimpan di kolom q25 seperti sebelumnya)
+            {"id": "q25_pernah", "no": 25, "text": "Apakah kamu pernah diperiksa kadar Hb sebelumnya?"},
             {"id": "q25_kapan", "text": "Kapan terakhir diperiksa? (misalnya: Maret 2026)", "type": "text", "optional": True,
-             "show": lambda a: bool(a.get("q25")) and a.get("q25") != "Belum pernah"},
+             "show": lambda a: a.get("q25_pernah") == "Ya"},
+            {"id": "q25", "text": "Bagaimana hasilnya?", "options": ["Normal", "Anemia", "Tidak tahu hasilnya"],
+             "score": {"Anemia": 2}, "factor": "Hasil Hb sebelumnya anemia", "show": _pernah_hb},
         ],
     },
     {
@@ -172,8 +181,9 @@ TEKS = {
     "rendah": {
         "label": "TIDAK BERISIKO",
         "judul": "Hasil skrining kamu baik 🌱",
-        "isi": ["Dari jawabanmu, risiko anemia kamu saat ini tergolong rendah. Pertahankan kebiasaan baik ya: makan teratur, cukup lauk sumber zat besi seperti daging, ikan, telur, dan sayuran hijau, ditambah buah yang kaya vitamin C. Sebaiknya hindari minum teh atau kopi bersamaan dengan makan."],
-        "langkah": ["Pertahankan pola makan gizi seimbang.", "Skrining ulang dalam 6–12 bulan, atau lebih cepat kalau kamu mulai sering lelah atau pusing."],
+        "isi": ["Dari jawabanmu, risiko anemia kamu saat ini tergolong rendah. Pertahankan kebiasaan baik ya: makan teratur, cukup lauk sumber zat besi seperti daging, ikan, telur, dan sayuran hijau, ditambah buah yang kaya vitamin C. Sebaiknya hindari minum teh atau kopi bersamaan dengan makan.",
+                "Kondisi tubuh bisa berubah, jadi kami sarankan skrining ulang dalam 6–12 bulan, atau lebih cepat kalau kamu mulai sering lelah atau pusing."],
+        "langkah": ["Pertahankan pola makan gizi seimbang.", "Skrining ulang berkala tiap 6–12 bulan."],
         "tombol": ["tips", "selesai"],
     },
     "sedang": {
@@ -389,6 +399,14 @@ div[role="radiogroup"] [data-testid="stRadioOption"]{width:100%;padding:10px 14p
 .tips-kepala{display:flex;gap:12px;align-items:center;margin-bottom:6px;}
 .tips-kepala .ik{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:1.5rem;flex-shrink:0;}
 .tips-isi li{margin:6px 0;color:var(--ink);line-height:1.55;}
+.tabel-hb{width:100%;border-collapse:separate;border-spacing:0;margin:12px 0 6px;font-size:.92rem;overflow:hidden;border:1px solid var(--line);border-radius:14px;}
+.tabel-hb th,.tabel-hb td{padding:10px 12px;text-align:center;border-bottom:1px solid var(--line);}
+.tabel-hb th{background:var(--soft);color:var(--teal);font-weight:800;font-size:.82rem;}
+.tabel-hb td:first-child,.tabel-hb th:first-child{text-align:left;font-weight:700;color:var(--ink);}
+.tabel-hb tr:last-child td{border-bottom:none;}
+.hb-normal{color:#1E9E6A;font-weight:800;}.hb-ringan{color:#B7791F;font-weight:700;}.hb-sedang{color:#C2410C;font-weight:700;}.hb-berat{color:#B42318;font-weight:800;}
+.catatan{color:var(--muted);font-size:.85rem;line-height:1.55;margin-top:8px;}
+.referensi{color:var(--muted);font-size:.8rem;line-height:1.5;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
 .kaki{text-align:center;font-size:.78rem;color:var(--muted);margin-top:2.2rem;padding-top:1rem;border-top:1px solid var(--line);}
 @media (max-width:640px){
 .panel{padding:26px 20px 4px;border-radius:22px;}
@@ -694,6 +712,8 @@ def selesai_form():
     h = hitung_hasil(visible)
     j = bersihkan_jawaban(visible)
     j["prodi"] = norm_prodi(j.get("prodi"))
+    if visible.get("q25_pernah") == "Tidak":  # kolom "Q25 Hasil Hb sebelumnya" di Sheets tetap bermakna
+        j["q25"] = "Belum pernah"
     tbm = float(j["tb"]) / 100
     imt = round(float(j["bb"]) / (tbm * tbm) * 10) / 10
     ss.hasil = h
@@ -831,7 +851,7 @@ def tampil_hasil(h, a, kode, baru, waktu=None):
     aksi = []
     for k in t["tombol"]:
         if k == "faskes":
-            aksi.append(("🏥 Cari fasilitas kesehatan", "hasil_faskes", "primary",
+            aksi.append(("🏥 Cari fasilitas kesehatan terdekat", "hasil_faskes", "primary",
                          lambda: ke("faskes", asal="hasil" if baru else "hasil-riwayat")))
         elif k == "tips":
             aksi.append(("🥗 Tips gizi seimbang" if h["level"] == "rendah" else "🥗 Tips pola makan", "hasil_tips", "secondary",
@@ -926,6 +946,20 @@ def halaman_tips():
             li = "".join(f"<li>{html.escape(b)}</li>" for b in butir)
             htm(f"""<div class='tips-kepala'><div class='ik' style='background:{latar}'>{ikon}</div>
                 <div class='judul-bagian'>{html.escape(judul)}</div></div><ul class='tips-isi'>{li}</ul>""")
+    with kartu("tips_hb"):
+        htm("""<div class='tips-kepala'><div class='ik' style='background:#FFF1F0'>🩸</div>
+            <div><div class='judul-bagian'>Acuan kadar Hb (WHO, diadopsi Kemenkes)</div>
+            <div class='sub-kartu'>Batas untuk usia ≥15 tahun, dalam g/dL.</div></div></div>
+            <table class='tabel-hb'><thead><tr><th>Kelompok</th><th>Tidak anemia</th><th>Ringan</th><th>Sedang</th><th>Berat</th></tr></thead>
+            <tbody><tr><td>Perempuan tidak hamil</td><td class='hb-normal'>≥12,0</td><td class='hb-ringan'>11,0–11,9</td>
+            <td class='hb-sedang'>8,0–10,9</td><td class='hb-berat'>&lt;8,0</td></tr>
+            <tr><td>Laki-laki</td><td class='hb-normal'>≥13,0</td><td class='hb-ringan'>11,0–12,9</td>
+            <td class='hb-sedang'>8,0–10,9</td><td class='hb-berat'>&lt;8,0</td></tr></tbody></table>
+            <div class='catatan'>Untuk perempuan hamil, batas Hb berbeda, sehingga sebaiknya mengikuti pedoman khusus ibu hamil.
+            Status anemia hanya bisa dipastikan lewat pemeriksaan kadar Hb oleh tenaga kesehatan.</div>
+            <div class='referensi'><b>Referensi</b><br>Kemenkes RI. (2018). <i>Pedoman Pencegahan dan Penanggulangan Anemia pada Remaja
+            Putri dan Wanita Usia Subur (WUS)</i>. Jakarta: Kemenkes RI.<br>World Health Organization. <i>Haemoglobin concentrations for
+            the diagnosis of anaemia and assessment of severity</i>.</div>""")
     if tombol(label_kembali(), "tips_kembali"):
         kembali_asal()
 
