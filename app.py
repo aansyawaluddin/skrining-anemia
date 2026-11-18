@@ -688,6 +688,133 @@ def halaman_riwayat():
         kembali_asal()
 
 
+def _waktu(v):
+    try:
+        if isinstance(v, (int, float)) and v:
+            return datetime.fromtimestamp(v / 1000, TZ)
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).astimezone(TZ)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def muat_rekap(pin):
+    with st.spinner("Memuat data…"):
+        try:
+            res = api("rekap", pin=pin)
+            if res is None:
+                ss.adm = {"status": "gagal", "pesan": "API_URL belum diisi di secrets.", "data": None, "pin": ""}
+            else:
+                ss.adm = {"status": "ok", "pesan": "", "data": res.get("data") or {}, "pin": pin}
+        except Exception as e:  # noqa: BLE001
+            ss.adm = {"status": "gagal", "pesan": str(e), "data": None, "pin": ""}
+
+
+def halaman_admin():
+    import pandas as pd
+
+    topbar("Dasbor Petugas")
+    adm = ss.setdefault("adm", {"status": "", "pesan": "", "data": None, "pin": ""})
+
+    if adm["status"] != "ok":
+        st.subheader("Masuk sebagai petugas")
+        with st.form("adm_login"):
+            pin = st.text_input("PIN petugas", type="password")
+            masuk = st.form_submit_button("MASUK", type="primary", use_container_width=True)
+        if masuk:
+            muat_rekap(pin)
+            st.rerun()
+        if adm["status"] == "gagal":
+            st.markdown(f":red[{html.escape(adm['pesan'])}]")
+        if tombol("KEMBALI KE BERANDA", "adm_home"):
+            st.query_params.clear()
+            ke("home")
+        return
+
+    data = adm["data"]
+    df = pd.DataFrame(data.get("rows") or [])
+    c1, c2 = st.columns(2)
+    if c1.button("↻ MUAT ULANG", use_container_width=True):
+        muat_rekap(adm["pin"])
+        st.rerun()
+    if c2.button("KELUAR", use_container_width=True):
+        ss.adm = {"status": "", "pesan": "", "data": None, "pin": ""}
+        st.rerun()
+
+    if df.empty:
+        st.info("Belum ada responden.")
+        return
+
+    df["waktu"] = df["waktu"].map(_waktu)
+    df["persen"] = pd.to_numeric(df["persen"], errors="coerce")
+    df["imt"] = pd.to_numeric(df["imt"], errors="coerce")
+
+    # --- Filter ---
+    with st.expander("Filter", expanded=False):
+        prodi = st.multiselect("Prodi", sorted(df["prodi"].dropna().astype(str).unique()))
+        jk = st.multiselect("Jenis kelamin", sorted(df["jk"].dropna().astype(str).unique()))
+        tgl = df["waktu"].dropna()
+        rentang = None
+        if not tgl.empty:
+            rentang = st.date_input("Rentang tanggal", (tgl.min().date(), tgl.max().date()))
+    if prodi:
+        df = df[df["prodi"].astype(str).isin(prodi)]
+    if jk:
+        df = df[df["jk"].astype(str).isin(jk)]
+    if rentang and isinstance(rentang, tuple) and len(rentang) == 2:
+        d = df["waktu"].map(lambda w: w.date() if w else None)
+        df = df[(d >= rentang[0]) & (d <= rentang[1])]
+    if df.empty:
+        st.info("Tidak ada data yang cocok dengan filter.")
+        return
+
+    # --- Ringkasan ---
+    n = len(df)
+    lv = df["level"].value_counts()
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Responden", n)
+    for kol, key in ((k2, "rendah"), (k3, "sedang"), (k4, "tinggi")):
+        j = int(lv.get(key, 0))
+        kol.metric(f"Risiko {key}", j, f"{j / n * 100:.0f}%", delta_color="off")
+    st.caption(f"Rata-rata skor risiko: {fmt(df['persen'].mean())}% · Rata-rata IMT: {fmt(df['imt'].mean())}")
+
+    # --- Grafik ---
+    urut = ["rendah", "sedang", "tinggi"]
+    st.markdown("**Sebaran kategori risiko**")
+    st.bar_chart(pd.DataFrame({"Jumlah": [int(lv.get(k, 0)) for k in urut]},
+                              index=[k.capitalize() for k in urut]), color="#0E7C86")
+
+    st.markdown("**Kategori risiko per prodi**")
+    per_prodi = pd.crosstab(df["prodi"], df["level"]).reindex(columns=urut, fill_value=0)
+    per_prodi.columns = [k.capitalize() for k in per_prodi.columns]
+    st.bar_chart(per_prodi, color=[WARNA[k] for k in urut], horizontal=True)
+
+    st.markdown("**Kategori risiko per jenis kelamin**")
+    per_jk = pd.crosstab(df["jk"], df["level"]).reindex(columns=urut, fill_value=0)
+    per_jk.columns = [k.capitalize() for k in per_jk.columns]
+    st.bar_chart(per_jk, color=[WARNA[k] for k in urut])
+
+    harian = df.dropna(subset=["waktu"]).assign(Tanggal=lambda x: x["waktu"].map(lambda w: w.date()))
+    if not harian.empty:
+        st.markdown("**Responden per hari**")
+        st.line_chart(harian.groupby("Tanggal").size().rename("Responden"), color="#0E7C86")
+
+    faktor = (df["faktor"].fillna("").astype(str).str.split(";").explode().str.strip())
+    faktor = faktor[faktor != ""].value_counts().head(10)
+    if not faktor.empty:
+        st.markdown("**10 faktor risiko terbanyak**")
+        st.dataframe(faktor.rename_axis("Faktor").reset_index(name="Jumlah"),
+                     hide_index=True, use_container_width=True)
+
+    # --- Tabel & unduh ---
+    with st.expander("Data responden (tanpa kode responden)"):
+        tampil_df = df.assign(waktu=df["waktu"].map(lambda w: w.strftime("%d-%m-%Y %H:%M") if w else ""))
+        st.dataframe(tampil_df, hide_index=True, use_container_width=True)
+        st.download_button("UNDUH CSV", tampil_df.to_csv(index=False).encode("utf-8"),
+                           "rekap-skrining-anemia.csv", "text/csv", use_container_width=True)
+    if data.get("sheetUrl"):
+        st.link_button("BUKA GOOGLE SHEETS", data["sheetUrl"], use_container_width=True)
+
+
 # =========================================================
 # 6. JALANKAN
 # =========================================================
@@ -703,8 +830,10 @@ st.markdown("""
 
 HALAMAN = {
     "home": halaman_home, "form": halaman_form, "hasil": halaman_hasil, "hasil-riwayat": halaman_hasil_riwayat,
-    "tips": halaman_tips, "faskes": halaman_faskes, "riwayat": halaman_riwayat,
+    "tips": halaman_tips, "faskes": halaman_faskes, "riwayat": halaman_riwayat, "admin": halaman_admin,
 }
+if "admin" in st.query_params:  # dasbor petugas: buka URL aplikasi + ?admin
+    ss.page = "admin"
 HALAMAN[ss.page]()
 
 st.markdown("<hr style='margin-top:2rem'><div style='text-align:center;font-size:.75rem;color:#5B6B6C'>"
