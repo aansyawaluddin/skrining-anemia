@@ -670,10 +670,31 @@ def kirim():
             ss.galat = str(e)
 
 
+# Nama prodi diseragamkan (isian bebas: "kesmas", "Kesehatan masyarakat", dst. jadi satu)
+ALIAS_PRODI = {
+    "kesmas": "Kesehatan Masyarakat", "kes mas": "Kesehatan Masyarakat", "ikm": "Kesehatan Masyarakat",
+    "ilmu kesehatan masyarakat": "Kesehatan Masyarakat", "s1 kesehatan masyarakat": "Kesehatan Masyarakat",
+    "s1 kesmas": "Kesehatan Masyarakat",
+}
+KATA_KECIL = {"dan", "di", "ke", "dari", "untuk"}
+
+
+def norm_prodi(v):
+    t = re.sub(r"\s+", " ", str(v or "")).strip(" .,-")
+    if not t:
+        return "Tidak diisi"
+    kunci = t.lower()
+    if kunci in ALIAS_PRODI:
+        return ALIAS_PRODI[kunci]
+    return " ".join(w if w.isupper() and len(w) > 1 else (w.lower() if i and w.lower() in KATA_KECIL else w.capitalize())
+                    for i, w in enumerate(t.split(" ")))
+
+
 def selesai_form():
     visible = jawaban_tampil()
     h = hitung_hasil(visible)
     j = bersihkan_jawaban(visible)
+    j["prodi"] = norm_prodi(j.get("prodi"))
     tbm = float(j["tb"]) / 100
     imt = round(float(j["bb"]) / (tbm * tbm) * 10) / 10
     ss.hasil = h
@@ -1049,6 +1070,7 @@ def halaman_admin():
     df["waktu"] = df["waktu"].map(_waktu)
     df["persen"] = pd.to_numeric(df["persen"], errors="coerce")
     df["imt"] = pd.to_numeric(df["imt"], errors="coerce")
+    df["prodi"] = df["prodi"].map(norm_prodi)
 
     with st.expander("🔎 Filter data", expanded=False):
         f1, f2, f3 = st.columns(3)
