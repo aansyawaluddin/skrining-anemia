@@ -775,7 +775,10 @@ def halaman_admin():
     for kol, key in ((k2, "rendah"), (k3, "sedang"), (k4, "tinggi")):
         j = int(lv.get(key, 0))
         kol.metric(f"Risiko {key}", j, f"{j / n * 100:.0f}%", delta_color="off")
-    st.caption(f"Rata-rata skor risiko: {fmt(df['persen'].mean())}% · Rata-rata IMT: {fmt(df['imt'].mean())}")
+    teks = f"Rata-rata skor risiko: {fmt(df['persen'].mean())}% · Rata-rata IMT: {fmt(df['imt'].mean())}"
+    if "segera" in df:
+        teks += f" · Perlu segera periksa: {int((df['segera'] == 'Ya').sum())}"
+    st.caption(teks)
 
     # --- Grafik ---
     urut = ["rendah", "sedang", "tinggi"]
