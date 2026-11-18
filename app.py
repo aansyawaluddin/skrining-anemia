@@ -42,7 +42,6 @@ SECTIONS = [
         "hint": "Data ini dijaga kerahasiaannya dan hanya dipakai untuk keperluan penelitian.",
         "q": [
             {"id": "nama", "text": "Nama", "type": "text"},
-            {"id": "nim", "text": "NIM", "type": "text"},
             {"id": "prodi", "text": "Program studi", "type": "text"},
             {"id": "semester", "text": "Semester", "type": "number", "min": 1, "max": 14},
             {"id": "usia", "text": "Usia (tahun)", "type": "number", "min": 15, "max": 60},
@@ -820,8 +819,8 @@ def tampil_hasil(h, a, kode, baru, waktu=None):
         kotak = f"Kode responden<br><span class='kode'>{html.escape(kode)}</span>"
     elif kode:
         kotak = (f"Kode responden kamu<br><span class='kode'>{html.escape(kode)}</span><br>"
-                 "<span style='font-size:.9rem;color:#5E7378'>Kode ini terhubung otomatis dengan NIM-mu. Simpan kode ini untuk melihat "
-                 "riwayat hasil. Skrining ulang dengan NIM yang sama akan masuk ke riwayat yang sama.</span>")
+                 "<span style='font-size:.9rem;color:#5E7378'>Simpan atau foto kode ini. Kode ini dipakai untuk melihat kembali "
+                 "hasil skriningmu di menu Riwayat.</span>")
     elif ss.simpan == "gagal":
         kotak = "Kode responden belum terbentuk karena jawaban gagal disimpan."
     else:
@@ -956,7 +955,7 @@ def halaman_riwayat():
     kiri, kanan = split()
     with kiri:
         panel("riwayat", "Riwayat hasil", "Pantau perkembangan hasil skriningmu",
-              "Semua skrining dengan NIM yang sama otomatis tergabung dalam satu kode responden.",
+              "Lihat kembali hasil skriningmu kapan saja dengan kode responden yang muncul di layar hasil.",
               ["🎫 Pakai kode responden", "📈 Bandingkan hasil", "🔒 Tanpa data identitas"])
     with kanan, kartu("riwayat"):
         judul_kartu("Masukkan kode responden", "Kode muncul di layar hasil skrining, contoh <b>ANM-261118-AB12CD</b>.")
@@ -1032,7 +1031,7 @@ def halaman_admin():
         kiri, kanan = split()
         with kiri:
             panel("admin", "Khusus petugas", "Dasbor rekap skrining anemia",
-                  "Pantau sebaran risiko anemia mahasiswa secara langsung. Data ditampilkan tanpa nama, NIM, dan kode responden.",
+                  "Pantau sebaran risiko anemia mahasiswa secara langsung. Data ditampilkan tanpa nama dan kode responden.",
                   ["📊 Grafik interaktif", "⬇️ Unduh CSV", "🔐 Dilindungi PIN"])
         with kanan, kartu("admin"):
             judul_kartu("Masuk sebagai petugas 🔐", "Masukkan PIN petugas untuk membuka dasbor.")
