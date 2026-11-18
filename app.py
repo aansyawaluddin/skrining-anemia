@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+import altair as alt
 import requests
 import streamlit as st
 import streamlit.components.v1 as components  # dipakai hanya bila st.iframe belum ada
@@ -966,6 +967,20 @@ def halaman_riwayat():
             kembali_asal()
 
 
+SUMBU_Y = alt.Axis(format="d", tickMinStep=1, grid=True)
+LEGENDA = alt.Legend(orient="bottom", title=None)
+
+
+def grafik(chart, tinggi):
+    """Grafik statis (tidak bisa di-zoom/digeser), tinggi tetap."""
+    st.altair_chart(chart.properties(height=tinggi)
+                    .configure_view(strokeWidth=0)
+                    .configure_axis(labelFont="Plus Jakarta Sans", titleFont="Plus Jakarta Sans", labelColor="#5E7378",
+                                    titleColor="#5E7378", gridColor="#E6EFEF", domainColor="#DCEBEC", tickColor="#DCEBEC")
+                    .configure_legend(labelFont="Plus Jakarta Sans", labelColor="#17323A"),
+                    width="stretch")
+
+
 def _waktu(v):
     try:
         if isinstance(v, (int, float)) and v:
@@ -1066,34 +1081,58 @@ def halaman_admin():
     st.caption(f"Rata-rata skor risiko: {fmt(df['persen'].mean())}% · Rata-rata IMT: {fmt(df['imt'].mean())}")
 
     urut = ["rendah", "sedang", "tinggi"]
-    warna = [WARNA[k] for k in urut]
+    label = [k.capitalize() for k in urut]
+    warna = alt.Scale(domain=label, range=[WARNA[k] for k in urut])
+    dk = df.assign(Kategori=df["level"].map(lambda v: str(v).capitalize()))
+    dk = dk[dk["Kategori"].isin(label)]
+    tip = ["Kategori:N", alt.Tooltip("Jumlah:Q", format="d")]
+
     g1, g2 = st.columns(2)
     with g1, kartu("g_kategori"):
         judul_bagian("🎯", "Sebaran kategori risiko")
-        label = [k.capitalize() for k in urut]
-        sebaran = pd.DataFrame({label[i]: [int(lv.get(k, 0)) if j == i else 0 for j in range(3)] for i, k in enumerate(urut)},
-                               index=label)
-        st.bar_chart(sebaran, color=warna, height=280)
+        d = pd.DataFrame({"Kategori": label, "Jumlah": [int(lv.get(k, 0)) for k in urut]})
+        dasar = alt.Chart(d).encode(x=alt.X("Kategori:N", sort=label, title=None, axis=alt.Axis(labelAngle=0)),
+                                    y=alt.Y("Jumlah:Q", title="Jumlah responden", axis=SUMBU_Y))
+        grafik(dasar.mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, size=56)
+               .encode(color=alt.Color("Kategori:N", scale=warna, legend=None), tooltip=tip)
+               + dasar.mark_text(dy=-9, fontWeight="bold", color="#17323A").encode(text="Jumlah:Q"), 280)
     with g2, kartu("g_jk"):
         judul_bagian("⚧️", "Kategori risiko per jenis kelamin")
-        per_jk = pd.crosstab(df["jk"], df["level"]).reindex(columns=urut, fill_value=0)
-        per_jk.columns = [k.capitalize() for k in per_jk.columns]
-        st.bar_chart(per_jk, color=warna, height=280)
+        d = dk.groupby(["jk", "Kategori"]).size().reset_index(name="Jumlah")
+        grafik(alt.Chart(d).mark_bar(size=56).encode(
+            x=alt.X("jk:N", title=None, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("Jumlah:Q", stack="zero", title="Jumlah responden", axis=SUMBU_Y),
+            color=alt.Color("Kategori:N", scale=warna, sort=label, legend=LEGENDA),
+            order=alt.Order("urutan:Q"), tooltip=["jk:N"] + tip,
+        ).transform_calculate(urutan="indexof(%s, datum.Kategori)" % label), 280)
 
     with kartu("g_prodi"):
         judul_bagian("🎓", "Kategori risiko per prodi")
-        per_prodi = pd.crosstab(df["prodi"], df["level"]).reindex(columns=urut, fill_value=0)
-        per_prodi.columns = [k.capitalize() for k in per_prodi.columns]
-        st.bar_chart(per_prodi, color=warna, horizontal=True, height=max(220, 44 * len(per_prodi)))
+        d = dk.groupby(["prodi", "Kategori"]).size().reset_index(name="Jumlah")
+        urut_prodi = d.groupby("prodi")["Jumlah"].sum().sort_values(ascending=False).index.tolist()
+        n_prodi = len(urut_prodi)
+        grafik(alt.Chart(d).mark_bar().encode(
+            y=alt.Y("prodi:N", title=None, sort=urut_prodi, scale=alt.Scale(paddingInner=.35)),
+            x=alt.X("Jumlah:Q", stack="zero", title="Jumlah responden", axis=SUMBU_Y),
+            color=alt.Color("Kategori:N", scale=warna, sort=label, legend=LEGENDA),
+            order=alt.Order("urutan:Q"), tooltip=["prodi:N"] + tip,
+        ).transform_calculate(urutan="indexof(%s, datum.Kategori)" % label), 46 * n_prodi + 70)
 
     g3, g4 = st.columns(2)
-    harian = df.dropna(subset=["waktu"]).assign(Tanggal=lambda x: x["waktu"].map(lambda w: w.date()))
+    harian = df.dropna(subset=["waktu"])
     with g3, kartu("g_harian"):
         judul_bagian("📅", "Responden per hari")
         if harian.empty:
             st.caption("Belum ada data tanggal.")
         else:
-            st.area_chart(harian.groupby("Tanggal").size().rename("Responden"), color="#14A3A8", height=260)
+            d = harian.assign(Tanggal=harian["waktu"].map(lambda w: w.date())).groupby("Tanggal").size().reset_index(name="Jumlah")
+            d["Label"] = d["Tanggal"].map(lambda t: t.strftime("%d/%m"))
+            urut_tgl = list(d.sort_values("Tanggal")["Label"])
+            dasar = alt.Chart(d).encode(x=alt.X("Label:N", sort=urut_tgl, title=None, axis=alt.Axis(labelAngle=0)),
+                                        y=alt.Y("Jumlah:Q", title="Jumlah responden", axis=SUMBU_Y))
+            grafik(dasar.mark_bar(color="#14A3A8", cornerRadiusTopLeft=6, cornerRadiusTopRight=6, size=min(48, max(10, 360 // len(d))))
+                   .encode(tooltip=[alt.Tooltip("Label:N", title="Tanggal"), alt.Tooltip("Jumlah:Q", format="d")])
+                   + dasar.mark_text(dy=-9, fontWeight="bold", color="#17323A").encode(text="Jumlah:Q"), 260)
     with g4, kartu("g_faktor"):
         judul_bagian("🔍", "10 faktor risiko terbanyak")
         faktor = df["faktor"].fillna("").astype(str).str.split(";").explode().str.strip()
