@@ -7,7 +7,9 @@ Secrets (.streamlit/secrets.toml atau menu Secrets di Streamlit Cloud):
     API_KEY = "kunci-yang-sama-dengan-API_KEY-di-Code.gs"
 Tanpa secrets, aplikasi jalan dalam mode uji lokal (jawaban tidak disimpan).
 """
+import base64
 import html
+import re
 import random
 import string
 from datetime import datetime, timedelta
@@ -18,7 +20,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components  # dipakai hanya bila st.iframe belum ada
 
-st.set_page_config(page_title="Skrining Risiko Anemia Mahasiswa", page_icon="🩺", layout="centered")
+st.set_page_config(page_title="Skrining Risiko Anemia Mahasiswa", page_icon="🩺", layout="wide")
 
 TZ = ZoneInfo("Asia/Makassar")
 
@@ -297,20 +299,222 @@ def fmt(n):
     return s.replace(".", ",")
 
 
+# =========================================================
+# 5. TAMPILAN: CSS, ILUSTRASI, KOMPONEN
+# =========================================================
+GAYA = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{--teal:#0E7C86;--teal2:#14A3A8;--ink:#17323A;--muted:#5E7378;--line:#DCEBEC;--soft:#EEF7F7;}
+html,body,.stApp,button,input,textarea,select,p,li,label,h1,h2,h3,h4,h5,h6,[data-testid="stMarkdownContainer"],[data-testid="stMarkdownContainer"] *,[data-testid="stMetricValue"],[data-testid="stMetricLabel"]{font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif !important;}
+.stApp{background:radial-gradient(900px 520px at 0% -10%,#DDF2F1 0,transparent 60%),radial-gradient(760px 460px at 100% 0%,#FDE9E9 0,transparent 60%),#F6FAFA;}
+[data-testid="stHeader"]{background:transparent;}
+#MainMenu,footer{visibility:hidden;}
+.block-container,[data-testid="stMainBlockContainer"]{max-width:1080px;padding-top:4.5rem !important;padding-bottom:1.5rem !important;}
+h1,h2,h3{color:var(--ink);letter-spacing:-.02em;}
+.brand{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:18px;padding:10px 14px;box-shadow:0 6px 20px rgba(14,124,134,.06);margin-bottom:22px;}
+.brand img{width:42px;height:42px;border-radius:12px;}
+.brand-nama{font-weight:800;color:var(--ink);line-height:1.15;}
+.brand-sub{font-size:.75rem;color:var(--muted);}
+.brand-hal{margin-left:auto;background:var(--soft);color:var(--teal);font-weight:700;font-size:.8rem;padding:6px 12px;border-radius:999px;white-space:nowrap;}
+.panel{position:relative;overflow:hidden;background:linear-gradient(150deg,#0B6E77 0%,#14A3A8 100%);border-radius:28px;padding:34px 30px 6px;color:#fff;box-shadow:0 20px 45px rgba(14,124,134,.25);}
+.panel:before{content:"";position:absolute;width:280px;height:280px;border-radius:50%;background:rgba(255,255,255,.08);top:-110px;right:-90px;}
+.panel-label{display:inline-block;background:rgba(255,255,255,.18);padding:5px 12px;border-radius:999px;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+.panel-judul{font-size:2.05rem;font-weight:800;line-height:1.15;margin:14px 0 10px;letter-spacing:-.02em;}
+.panel-isi{opacity:.92;font-size:.98rem;line-height:1.65;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+.chip{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);padding:6px 12px;border-radius:999px;font-size:.82rem;font-weight:600;}
+.panel-img{display:block;width:100%;max-width:380px;margin:10px auto 0;}
+.banner{display:flex;align-items:center;gap:18px;background:linear-gradient(150deg,#0B6E77 0%,#14A3A8 100%);color:#fff;border-radius:24px;padding:22px 26px;margin-bottom:18px;box-shadow:0 16px 36px rgba(14,124,134,.22);}
+.banner-ikon{font-size:2.4rem;background:rgba(255,255,255,.16);width:68px;height:68px;border-radius:20px;display:grid;place-items:center;flex-shrink:0;}
+.banner-judul{font-size:1.45rem;font-weight:800;line-height:1.2;}
+.banner-isi{opacity:.92;font-size:.92rem;margin-top:4px;}
+[class*="st-key-kartu"]{background:#fff;border:1px solid var(--line) !important;border-radius:22px !important;box-shadow:0 10px 30px rgba(23,50,58,.06);padding:22px !important;}
+.judul-kartu{font-size:1.35rem;font-weight:800;color:var(--ink);line-height:1.25;}
+.sub-kartu{color:var(--muted);font-size:.92rem;margin-top:4px;line-height:1.55;}
+.judul-bagian{font-size:1.08rem;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:10px;}
+.judul-bagian .ik{width:34px;height:34px;border-radius:10px;background:var(--soft);display:grid;place-items:center;font-size:1.05rem;}
+.pemisah{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.8rem;margin:2px 0;}
+.pemisah:before,.pemisah:after{content:"";flex:1;height:1px;background:var(--line);}
+.stButton button,.stFormSubmitButton button,.stDownloadButton button,.stLinkButton a{border-radius:14px !important;min-height:48px;font-weight:700 !important;transition:transform .15s ease,box-shadow .15s ease;}
+.stButton button:hover,.stFormSubmitButton button:hover,.stDownloadButton button:hover,.stLinkButton a:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(14,124,134,.18);}
+[data-testid="stBaseButton-primary"],[data-testid="stBaseButton-primaryFormSubmit"],[data-testid="stBaseLinkButton-primary"]{background:linear-gradient(135deg,#0E7C86,#14A3A8) !important;border:none !important;color:#fff !important;}
+[data-testid="stBaseButton-secondary"],[data-testid="stBaseButton-secondaryFormSubmit"],[data-testid="stBaseLinkButton-secondary"]{background:#fff !important;border:1.5px solid var(--line) !important;color:var(--ink) !important;}
+.stButton button:disabled{opacity:.45;transform:none;box-shadow:none;}
+[class*="st-key-rwitem"] button{justify-content:flex-start;text-align:left;padding:14px 16px;}
+[data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div{border-radius:12px !important;}
+[data-testid="stWidgetLabel"] p{font-weight:600;color:var(--ink);font-size:.98rem;line-height:1.5;}
+div[role="radiogroup"]{gap:8px;align-items:stretch;width:100%;}
+div[role="radiogroup"]>div{flex:1 1 auto;background:#fff;border:1.5px solid var(--line);border-radius:12px;transition:all .15s;}
+div[role="radiogroup"]>div:hover{border-color:#9FD3D3;}
+div[role="radiogroup"]>div:has(input:checked){border-color:var(--teal);background:#E8F6F6;box-shadow:0 0 0 3px rgba(14,124,134,.12);}
+div[role="radiogroup"] [data-testid="stRadioOption"]{width:100%;padding:10px 14px;margin:0;cursor:pointer;}
+[data-testid="stExpander"] details{border-radius:14px !important;border:1px solid var(--line) !important;background:#FAFDFD;}
+[data-testid="stExpander"] summary p{font-weight:700;color:var(--ink);}
+[data-testid="stMetric"]{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px 18px;box-shadow:0 6px 18px rgba(23,50,58,.05);}
+[data-testid="stMetricValue"]{font-weight:800;color:var(--ink);}
+.langkah-step{display:flex;gap:6px;margin:12px 0 4px;}
+.langkah-step span{flex:1;height:8px;border-radius:99px;background:#DCEBEC;}
+.langkah-step span.ok{background:#7CC8C8;}
+.langkah-step span.kini{background:linear-gradient(90deg,#0E7C86,#14A3A8);}
+.form-kepala{display:flex;align-items:center;gap:14px;}
+.form-kepala .ik{width:54px;height:54px;border-radius:16px;background:linear-gradient(140deg,#E8F6F6,#D3EEEE);display:grid;place-items:center;font-size:1.6rem;flex-shrink:0;}
+.form-kecil{font-size:.78rem;font-weight:700;color:var(--teal);letter-spacing:.06em;text-transform:uppercase;}
+.hero{display:flex;align-items:center;gap:22px;flex-wrap:wrap;border-radius:26px;padding:24px 28px;color:#fff;box-shadow:0 18px 40px rgba(23,50,58,.18);margin-bottom:14px;}
+.hero img{width:132px;height:132px;}
+.hero-label{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.9;}
+.hero-kat{font-size:1.8rem;font-weight:800;line-height:1.15;margin:4px 0;}
+.hero-skor{font-size:1rem;opacity:.95;}
+.hero-waktu{font-size:.85rem;opacity:.85;margin-top:2px;}
+.fchip{display:inline-block;padding:7px 12px;border-radius:999px;margin:0 6px 8px 0;font-size:.85rem;font-weight:600;}
+.fchip.ubah{background:#E8F6F6;color:#0B6E77;border:1px solid #BFE3E3;}
+.fchip.lain{background:#FFF1F0;color:#B42318;border:1px solid #FBD0CC;}
+.kecil{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px;}
+.langkah{display:flex;gap:12px;align-items:flex-start;margin:10px 0;color:var(--ink);line-height:1.5;}
+.langkah b{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#0E7C86,#14A3A8);color:#fff;display:grid;place-items:center;font-size:.85rem;flex-shrink:0;}
+.tiket{border:2px dashed #9FD3D3;background:#F2FAFA;border-radius:18px;padding:16px 18px;color:var(--ink);line-height:1.55;}
+.kode{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1.35rem;font-weight:800;color:var(--teal);letter-spacing:.06em;}
+.darurat{background:linear-gradient(135deg,#FFF1F0,#FFE4E1);border:1px solid #FBD0CC;color:#912018;border-radius:18px;padding:14px 18px;margin-bottom:16px;line-height:1.55;}
+.darurat a{color:#B42318;font-weight:800;}
+.faskes-kepala{display:flex;gap:12px;align-items:flex-start;}
+.faskes-kepala .ik{width:46px;height:46px;border-radius:14px;background:#FFF1F0;display:grid;place-items:center;font-size:1.4rem;flex-shrink:0;}
+.badge{display:inline-block;background:var(--soft);color:var(--teal);font-size:.75rem;font-weight:700;padding:3px 10px;border-radius:999px;margin-top:4px;}
+.alamat{color:var(--muted);font-size:.9rem;margin:10px 0 4px;line-height:1.5;}
+.alamat a{color:var(--teal);font-weight:700;text-decoration:none;}
+.tips-kepala{display:flex;gap:12px;align-items:center;margin-bottom:6px;}
+.tips-kepala .ik{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:1.5rem;flex-shrink:0;}
+.tips-isi li{margin:6px 0;color:var(--ink);line-height:1.55;}
+.kaki{text-align:center;font-size:.78rem;color:var(--muted);margin-top:2.2rem;padding-top:1rem;border-top:1px solid var(--line);}
+@media (max-width:640px){
+.panel{padding:26px 20px 4px;border-radius:22px;}
+.panel-judul{font-size:1.6rem;}
+.brand-hal{display:none;}
+[class*="st-key-kartu"]{padding:16px !important;}
+.hero{padding:20px;justify-content:center;text-align:center;}
+.banner{padding:18px;}
+.banner-judul{font-size:1.2rem;}
+}
+</style>
+"""
+
+
+def htm(s):
+    """Tampilkan HTML sebagai satu blok (baris baru dihapus agar tidak diproses sebagai Markdown)."""
+    st.markdown(re.sub(r"\s*\n\s*", " ", s.strip()), unsafe_allow_html=True)
+
+
+def svg_uri(svg):
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode()
+
+
+def _sel(x, y, s=1.0):
+    """Satu sel darah merah."""
+    return (f"<g transform='translate({x} {y}) scale({s})'><ellipse rx='26' ry='20' fill='url(#rbc)'/>"
+            f"<ellipse rx='11' ry='8' fill='#A3162A' opacity='.45'/></g>")
+
+
+def _kilau(x, y):
+    return (f"<path d='M{x} {y - 8}v16M{x - 8} {y}h16' stroke='#fff' stroke-width='3' "
+            f"stroke-linecap='round' opacity='.75'/>")
+
+
+_SVG = ("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'><defs>"
+        "<linearGradient id='tetes' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#FF8A8A'/>"
+        "<stop offset='1' stop-color='#D62F3C'/></linearGradient>"
+        "<radialGradient id='rbc'><stop offset='0' stop-color='#C81E32'/><stop offset='.6' stop-color='#EF5350'/>"
+        "<stop offset='1' stop-color='#FF8A80'/></radialGradient></defs>")
+_LATAR = "<circle cx='200' cy='160' r='135' fill='#fff' opacity='.08'/><circle cx='200' cy='160' r='98' fill='#fff' opacity='.1'/>"
+
+ILUS = {
+    "home": _SVG + _LATAR
+    + "<path d='M200 40C200 40 128 125 128 175a72 72 0 0 0 144 0C272 125 200 40 200 40Z' fill='url(#tetes)'/>"
+    + "<path d='M166 155c-9 20-8 42 6 58' stroke='#fff' stroke-width='8' stroke-linecap='round' fill='none' opacity='.55'/>"
+    + "<polyline points='146,185 172,185 184,162 198,212 212,172 222,185 254,185' stroke='#fff' stroke-width='6' "
+      "stroke-linecap='round' stroke-linejoin='round' fill='none'/>"
+    + _sel(72, 85) + _sel(330, 95, .8) + _sel(322, 238, 1.1) + _sel(80, 232, .7)
+    + _kilau(115, 35) + _kilau(300, 30) + _kilau(365, 170) + _kilau(36, 160) + "</svg>",
+    "riwayat": _SVG + _LATAR
+    + "<rect x='110' y='50' width='170' height='220' rx='20' fill='#fff'/>"
+    + "<rect x='158' y='36' width='74' height='30' rx='10' fill='#FFCDD2'/>"
+    + "".join(f"<circle cx='142' cy='{y}' r='11' fill='{c}'/><rect x='164' y='{y - 7}' width='{w}' height='14' rx='7' fill='#D7EEEE'/>"
+              for y, c, w in ((110, "#1E9E6A", 90), (155, "#D99A00", 70), (200, "#C2410C", 84), (245, "#1E9E6A", 60)))
+    + "<circle cx='292' cy='212' r='40' fill='#fff' fill-opacity='.22' stroke='#fff' stroke-width='10'/>"
+    + "<line x1='321' y1='241' x2='352' y2='272' stroke='#fff' stroke-width='14' stroke-linecap='round'/>"
+    + "<path d='M70 60c0 0-22 26-22 40a22 22 0 0 0 44 0c0-14-22-40-22-40Z' fill='url(#tetes)'/>"
+    + _sel(70, 230, .8) + _kilau(330, 60) + _kilau(40, 170) + _kilau(370, 150) + "</svg>",
+    "admin": _SVG + _LATAR
+    + "<rect x='55' y='50' width='280' height='180' rx='20' fill='#fff'/>"
+    + "<rect x='175' y='230' width='40' height='26' fill='#fff' opacity='.85'/><rect x='135' y='254' width='120' height='12' rx='6' fill='#fff'/>"
+    + "".join(f"<rect x='{x}' y='{205 - h}' width='24' height='{h}' rx='6' fill='{c}'/>"
+              for x, h, c in ((85, 60, "#1E9E6A"), (119, 95, "#D99A00"), (153, 45, "#C2410C"), (187, 120, "#0E7C86")))
+    + "<line x1='78' y1='206' x2='222' y2='206' stroke='#D7EEEE' stroke-width='3'/>"
+    + "<circle cx='275' cy='125' r='34' fill='none' stroke='#D7EEEE' stroke-width='14'/>"
+    + "".join(f"<circle cx='275' cy='125' r='34' fill='none' stroke='{c}' stroke-width='14' pathLength='100' "
+              f"stroke-dasharray='{p} 100' stroke-dashoffset='{-o}' transform='rotate(-90 275 125)'/>"
+              for c, p, o in (("#1E9E6A", 45, 0), ("#D99A00", 30, 45), ("#C2410C", 25, 75)))
+    + "<path d='M335 170l38 14v26c0 24-17 40-38 48c-21-8-38-24-38-48v-26Z' fill='#FFCDD2' stroke='#fff' stroke-width='5'/>"
+    + "<rect x='322' y='203' width='26' height='22' rx='4' fill='#C62828'/>"
+    + "<path d='M327 203v-7a8 8 0 0 1 16 0v7' stroke='#C62828' stroke-width='4' fill='none'/>"
+    + _kilau(40, 40) + _kilau(370, 60) + _kilau(30, 250) + "</svg>",
+}
+
+LOGO = svg_uri("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>"
+               "<stop offset='0' stop-color='#14A3A8'/><stop offset='1' stop-color='#0B6E77'/></linearGradient></defs>"
+               "<rect width='48' height='48' rx='13' fill='url(#g)'/>"
+               "<path d='M24 9s-11 13-11 20a11 11 0 0 0 22 0c0-7-11-20-11-20Z' fill='#FF6B6B'/>"
+               "<polyline points='15,30 20,30 22,26 25,34 27,28 29,30 33,30' stroke='#fff' stroke-width='2.2' "
+               "stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>")
+
+WARNA2 = {"rendah": "#3CC48D", "sedang": "#F2B42A", "tinggi": "#EA580C"}
+IKON_BAGIAN = {"data": "👤", "gejala": "🤒", "haid": "🩸", "makan": "🥗", "ttd": "💊", "riwayat": "📋"}
+
+
+def atur_lebar(px):
+    htm(f"<style>.block-container,[data-testid='stMainBlockContainer']{{max-width:{px}px !important;}}</style>")
+
+
 def topbar(judul):
-    st.markdown(
-        f"<div style='background:#0E7C86;color:#fff;padding:14px 20px;font-weight:600;text-align:center;"
-        f"border-radius:10px;margin-bottom:14px'>{html.escape(judul)}</div>", unsafe_allow_html=True)
+    htm(f"""<div class='brand'><img src='{LOGO}' alt=''><div><div class='brand-nama'>Skrining Risiko Anemia</div>
+        <div class='brand-sub'>Mahasiswa · Kesehatan Masyarakat</div></div>
+        <div class='brand-hal'>{html.escape(judul)}</div></div>""")
+
+
+def panel(ilus, label, judul, isi, chips=()):
+    chip = "".join(f"<span class='chip'>{c}</span>" for c in chips)
+    htm(f"""<div class='panel'><div class='panel-label'>{label}</div><div class='panel-judul'>{judul}</div>
+        <div class='panel-isi'>{isi}</div><div class='chips'>{chip}</div>
+        <img class='panel-img' src='{svg_uri(ILUS[ilus])}' alt=''></div>""")
+
+
+def banner(ikon, judul, isi):
+    htm(f"""<div class='banner'><div class='banner-ikon'>{ikon}</div><div><div class='banner-judul'>{judul}</div>
+        <div class='banner-isi'>{isi}</div></div></div>""")
+
+
+def judul_kartu(judul, sub=""):
+    htm(f"<div class='judul-kartu'>{judul}</div>" + (f"<div class='sub-kartu'>{sub}</div>" if sub else ""))
+
+
+def judul_bagian(ikon, teks):
+    htm(f"<div class='judul-bagian'><span class='ik'>{ikon}</span>{teks}</div>")
+
+
+def kartu(nama):
+    return st.container(border=True, key=f"kartu_{nama}")
+
+
+def split():
+    return st.columns([1.05, 1], gap="large", vertical_alignment="center")
 
 
 def tombol(label, key, tipe="secondary", disabled=False):
-    return st.button(label, key=key, type=tipe, use_container_width=True, disabled=disabled)
+    return st.button(label, key=key, type=tipe, width="stretch", disabled=disabled)
 
 
 def label_kembali():
     if ss.asal in ("hasil", "hasil-riwayat") or (not ss.asal and ss.hasil):
-        return "KEMBALI KE HASIL"
-    return "KEMBALI KE BERANDA"
+        return "← Kembali ke hasil"
+    return "← Kembali ke beranda"
 
 
 def kembali_asal():
@@ -319,30 +523,39 @@ def kembali_asal():
 
 
 # =========================================================
-# 5. HALAMAN
+# 6. HALAMAN
 # =========================================================
 def halaman_home():
-    topbar("Skrining Risiko Anemia")
-    st.title("Skrining Risiko Anemia Mahasiswa")
-    st.write("Tujuan: mendeteksi risiko anemia lebih dini, supaya bisa segera diperiksa dan ditangani.")
-    st.markdown("- Sekitar 5 menit, terdiri dari 6 bagian singkat.\n"
-                "- Hasil dan saran tindak lanjut langsung tampil di akhir.\n"
-                "- Ini skrining risiko, **bukan diagnosis**.")
-    with st.expander("Lembar persetujuan (informed consent)", expanded=True):
-        st.write("Kamu diajak mengisi kuesioner skrining risiko anemia untuk keperluan tugas akhir/penelitian. "
-                 "Sebelum mulai, mohon pahami hal berikut:")
-        st.markdown(
-            "- Keikutsertaan bersifat sukarela. Kamu boleh berhenti kapan saja tanpa konsekuensi apa pun.\n"
-            "- Pertanyaan meliputi data diri, gejala, riwayat menstruasi (khusus perempuan), pola makan, konsumsi TTD, dan riwayat kesehatan.\n"
-            "- Jawaban disimpan secara rahasia dan hanya dipakai untuk penelitian. Laporan hanya menampilkan data gabungan tanpa identitas.\n"
-            "- Hasil skrining bukan diagnosis. Status anemia hanya bisa dipastikan lewat pemeriksaan kadar Hb.")
-    ss.consent = st.checkbox("Saya sudah membaca penjelasan di atas dan setuju ikut serta.", value=ss.consent)
-    if tombol("MULAI", "mulai", "primary", disabled=not ss.consent):
-        ke("form", step=0, errors={})
-    if tombol("LIHAT RIWAYAT HASIL", "ke_riwayat"):
-        ke("riwayat", asal="", rw={"kode": "", "status": "", "data": None, "pesan": ""})
-    if tombol("KONTAK LAYANAN KESEHATAN", "ke_faskes"):
-        ke("faskes", asal="home")
+    topbar("Beranda")
+    kiri, kanan = split()
+    with kiri:
+        panel("home", "Skrining mandiri", "Kenali risiko anemia lebih dini",
+              "Isi kuesioner singkat, lalu dapatkan hasil dan saran tindak lanjut yang sesuai, supaya bisa segera diperiksa "
+              "dan ditangani.", ["⏱️ ± 5 menit", "📋 6 bagian singkat", "🔒 Data dijaga rahasia"])
+    with kanan, kartu("home"):
+        judul_kartu("Mulai skrining 👋", "Ini skrining risiko, <b>bukan diagnosis</b>. Hasil dan saran tindak lanjut "
+                    "langsung tampil di akhir.")
+        with st.expander("📄 Baca lembar persetujuan (informed consent)", expanded=False):
+            st.write("Kamu diajak mengisi kuesioner skrining risiko anemia untuk keperluan tugas akhir/penelitian. "
+                     "Sebelum mulai, mohon pahami hal berikut:")
+            st.markdown(
+                "- Keikutsertaan bersifat sukarela. Kamu boleh berhenti kapan saja tanpa konsekuensi apa pun.\n"
+                "- Pertanyaan meliputi data diri, gejala, riwayat menstruasi (khusus perempuan), pola makan, konsumsi TTD, dan riwayat kesehatan.\n"
+                "- Jawaban disimpan secara rahasia dan hanya dipakai untuk penelitian. Laporan hanya menampilkan data gabungan tanpa identitas.\n"
+                "- Hasil skrining bukan diagnosis. Status anemia hanya bisa dipastikan lewat pemeriksaan kadar Hb.")
+        ss.consent = st.checkbox("Saya sudah membaca penjelasan di atas dan setuju ikut serta.", value=ss.consent)
+        if tombol("Mulai skrining  →", "mulai", "primary", disabled=not ss.consent):
+            ke("form", step=0, errors={})
+        htm("<div class='pemisah'>atau</div>")
+        k1, k2 = st.columns(2)
+        with k1:
+            if tombol("🕘 Riwayat hasil", "ke_riwayat"):
+                ke("riwayat", asal="", rw={"kode": "", "status": "", "data": None, "pesan": ""})
+        with k2:
+            if tombol("🏥 Layanan kesehatan", "ke_faskes"):
+                ke("faskes", asal="home")
+        if tombol("🥗 Tips gizi cegah anemia", "ke_tips"):
+            ke("tips", asal="home")
 
 
 def langkah_aktif():
@@ -352,7 +565,7 @@ def langkah_aktif():
 def render_pertanyaan(sec, q):
     a = ss.a
     key = f"{sec['id']}_{q['id']}"
-    no = f"**{q['no']}.** " if q.get("no") else ""
+    no = f"{q['no']}. " if q.get("no") else ""
     label = f"{no}{q['text']}" + (" *(opsional)*" if q.get("optional") else "")
     tipe = q.get("type")
     cur = a.get(q["id"])
@@ -451,26 +664,32 @@ def selesai_form():
 
 
 def halaman_form():
+    atur_lebar(780)
     langkah = langkah_aktif()
     ss.step = min(ss.step, len(langkah) - 1)
     sec = langkah[ss.step]
-    topbar(sec["title"])
-    st.progress((ss.step + 1) / len(langkah))
-    st.caption(f"Bagian {ss.step + 1} dari {len(langkah)}")
-    st.subheader(sec["title"])
-    if sec.get("hint"):
-        st.caption(sec["hint"])
+    topbar(f"Bagian {ss.step + 1} dari {len(langkah)}")
 
-    for q in sec["q"]:
-        if tampil(q, ss.a):
-            render_pertanyaan(sec, q)
+    with kartu("formkepala"):
+        bar = "".join(f"<span class='{'ok' if i < ss.step else 'kini' if i == ss.step else ''}'></span>"
+                      for i in range(len(langkah)))
+        hint = f"<div class='sub-kartu'>{html.escape(sec['hint'])}</div>" if sec.get("hint") else ""
+        htm(f"""<div class='form-kepala'><div class='ik'>{IKON_BAGIAN.get(sec['id'], '📝')}</div><div>
+            <div class='form-kecil'>Bagian {ss.step + 1} dari {len(langkah)}</div>
+            <div class='judul-kartu'>{html.escape(sec['title'])}</div>{hint}</div></div>
+            <div class='langkah-step'>{bar}</div>""")
+
+    with kartu("formisi"):
+        for q in sec["q"]:
+            if tampil(q, ss.a):
+                render_pertanyaan(sec, q)
 
     terakhir = ss.step == len(langkah) - 1
     k1, k2 = st.columns(2)
     with k1:
-        kembali = tombol("KEMBALI", "form_kembali")
+        kembali = tombol("← Kembali", "form_kembali")
     with k2:
-        lanjut = tombol("LIHAT HASIL" if terakhir else "LANJUT", "form_lanjut", "primary")
+        lanjut = tombol("Lihat hasil  ✓" if terakhir else "Lanjut  →", "form_lanjut", "primary")
 
     if kembali:
         ss.errors = {}
@@ -488,20 +707,30 @@ def halaman_form():
         ke("form")
 
 
+def gauge(persen):
+    p = max(0.0, min(float(persen), 100.0))
+    return svg_uri(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'>"
+        "<circle cx='60' cy='60' r='50' fill='none' stroke='rgba(255,255,255,.28)' stroke-width='12'/>"
+        f"<circle cx='60' cy='60' r='50' fill='none' stroke='#fff' stroke-width='12' stroke-linecap='round' pathLength='100' "
+        f"stroke-dasharray='{max(p, .5)} 100' transform='rotate(-90 60 60)'/>"
+        f"<text x='60' y='62' text-anchor='middle' font-family='Segoe UI,Arial,sans-serif' font-size='24' font-weight='800' fill='#fff'>{fmt(p)}%</text>"
+        "<text x='60' y='80' text-anchor='middle' font-family='Segoe UI,Arial,sans-serif' font-size='10' fill='#fff' opacity='.85'>skor risiko</text></svg>")
+
+
 def tampil_hasil(h, a, kode, baru, waktu=None):
+    atur_lebar(880)
     t = TEKS[h["level"]]
     topbar("Hasil Skrining")
 
-    sub = f"<div style='font-size:.85rem;opacity:.95'>Skrining pada {html.escape(waktu)}</div>" if waktu else ""
-    st.markdown(
-        f"<div style='background:{WARNA[h['level']]};color:#fff;border-radius:14px;padding:20px 16px;text-align:center'>"
-        f"<div style='font-size:1.45rem;font-weight:800;letter-spacing:.5px'>{t['label']}</div>"
-        f"<div style='margin-top:4px'>Skor {h['total']} dari {h['maks']} ({fmt(h['persen'])}%)</div>{sub}</div>",
-        unsafe_allow_html=True)
+    sub = f"<div class='hero-waktu'>Skrining pada {html.escape(waktu)}</div>" if waktu else ""
+    htm(f"""<div class='hero' style='background:linear-gradient(135deg,{WARNA[h['level']]},{WARNA2[h['level']]})'>
+        <img src='{gauge(h['persen'])}' alt='Skor {fmt(h['persen'])}%'><div>
+        <div class='hero-label'>Hasil skrining kamu</div><div class='hero-kat'>{t['label']}</div>
+        <div class='hero-skor'>Skor {h['total']} dari {h['maks']} ({fmt(h['persen'])}%)</div>{sub}</div></div>""")
 
     if h["override"] and h["level"] != "tinggi" and h["persen"] < 20:
         st.caption(f"Kategori ditetapkan \"berisiko\" karena: {'; '.join(h['override'])}.")
-
     if h["segera"]:
         st.error(f"**⚠️ Segera periksa.** {PESAN_OVERRIDE['segera']}")
     if a.get("q26") == "Ya" or a.get("q25") == "Anemia":
@@ -509,78 +738,87 @@ def tampil_hasil(h, a, kode, baru, waktu=None):
     if a.get("hamil") == "Ya":
         st.warning(PESAN_OVERRIDE["hamil"])
 
-    st.subheader(t["judul"])
-    for p in t["isi"]:
-        st.write(p)
+    with kartu("hasilarti"):
+        judul_kartu(t["judul"])
+        for p in t["isi"]:
+            st.write(p)
 
-    st.markdown("### Faktor yang berkontribusi")
-    if not h["faktor"]:
-        st.write("Tidak ada faktor risiko yang menonjol dari jawabanmu.")
-    else:
-        ubah = [f["label"] for f in h["faktor"] if f["bisa_diubah"]]
-        lain = [f["label"] for f in h["faktor"] if not f["bisa_diubah"]]
-        if ubah:
-            st.caption("Yang bisa kamu ubah:")
-            st.markdown("\n".join(f"- {x}" for x in ubah))
-        if lain:
-            st.caption("Gejala dan faktor lain:")
-            st.markdown("\n".join(f"- {x}" for x in lain))
+    k1, k2 = st.columns(2)
+    with k1, kartu("hasilfaktor"):
+        judul_bagian("🔍", "Faktor yang berkontribusi")
+        if not h["faktor"]:
+            st.write("Tidak ada faktor risiko yang menonjol dari jawabanmu.")
+        else:
+            ubah = [f["label"] for f in h["faktor"] if f["bisa_diubah"]]
+            lain = [f["label"] for f in h["faktor"] if not f["bisa_diubah"]]
+            isi = ""
+            if ubah:
+                isi += "<div class='kecil'>Yang bisa kamu ubah</div>" + "".join(f"<span class='fchip ubah'>{html.escape(x)}</span>" for x in ubah)
+            if lain:
+                isi += "<div class='kecil'>Gejala dan faktor lain</div>" + "".join(f"<span class='fchip lain'>{html.escape(x)}</span>" for x in lain)
+            htm(f"<div>{isi}</div>")
+    with k2, kartu("hasillangkah"):
+        judul_bagian("🧭", "Langkah berikutnya")
+        htm("".join(f"<div class='langkah'><b>{i}</b><div>{html.escape(x)}</div></div>" for i, x in enumerate(t["langkah"], 1)))
 
-    with st.container(border=True):
-        st.markdown("### Langkah berikutnya")
-        st.markdown("\n".join(f"- {x}" for x in t["langkah"]))
-
-    st.markdown("### Pasang pengingat")
-    pengingat = list(PENGINGAT[h["level"]])
-    if h["segera"]:
-        pengingat.insert(0, {"label": "Ingatkan periksa ke faskes (besok)", "judul": "Segera periksa ke fasilitas kesehatan", "hari": 1})
-    detail = ("Pengingat dari aplikasi Skrining Risiko Anemia.\nHasil: " + t["label"]
-              + (f"\nKode responden: {kode}" if kode else "")
-              + "\nTunjukkan hasil skrining ini kepada petugas kesehatan.")
-    for p in pengingat:
-        st.link_button(f"🔔 {p['label']}", link_kalender(p["judul"], p["hari"], detail), use_container_width=True)
-
-    st.write("")
-    for k in t["tombol"]:
-        if k == "faskes":
-            if tombol("CARI FASILITAS KESEHATAN TERDEKAT", "hasil_faskes", "primary"):
-                ke("faskes", asal="hasil" if baru else "hasil-riwayat")
-        elif k == "tips":
-            if tombol("LIHAT TIPS GIZI SEIMBANG" if h["level"] == "rendah" else "TIPS POLA MAKAN", "hasil_tips"):
-                ke("tips", asal="hasil" if baru else "hasil-riwayat")
-        elif k == "selesai":
-            if baru:
-                if tombol("SELESAI", "hasil_selesai", "primary"):
-                    kode_lama = ss.get("kode_terakhir", "")
-                    reset_state()
-                    ss.kode_terakhir = kode_lama
-                    ke("home")
-            elif tombol("KEMBALI KE RIWAYAT", "hasil_kembali_rw", "primary"):
-                ke("riwayat")
+    with kartu("hasilingat"):
+        judul_bagian("🔔", "Pasang pengingat di Google Calendar")
+        pengingat = list(PENGINGAT[h["level"]])
+        if h["segera"]:
+            pengingat.insert(0, {"label": "Ingatkan periksa ke faskes (besok)", "judul": "Segera periksa ke fasilitas kesehatan", "hari": 1})
+        detail = ("Pengingat dari aplikasi Skrining Risiko Anemia.\nHasil: " + t["label"]
+                  + (f"\nKode responden: {kode}" if kode else "")
+                  + "\nTunjukkan hasil skrining ini kepada petugas kesehatan.")
+        kol = st.columns(len(pengingat))
+        for c, p in zip(kol, pengingat):
+            c.link_button(p["label"], link_kalender(p["judul"], p["hari"], detail), width="stretch")
 
     if not baru:
-        kotak = f"Kode responden: **{kode}**"
+        kotak = f"Kode responden<br><span class='kode'>{html.escape(kode)}</span>"
     elif kode:
-        kotak = (f"Kode responden kamu: **{kode}**\n\nKode ini terhubung otomatis dengan NIM-mu. Pakai kode ini untuk melihat "
-                 "riwayat hasil. Skrining ulang dengan NIM yang sama akan masuk ke riwayat yang sama.")
+        kotak = (f"Kode responden kamu<br><span class='kode'>{html.escape(kode)}</span><br>"
+                 "<span style='font-size:.9rem;color:#5E7378'>Kode ini terhubung otomatis dengan NIM-mu. Simpan kode ini untuk melihat "
+                 "riwayat hasil. Skrining ulang dengan NIM yang sama akan masuk ke riwayat yang sama.</span>")
     elif ss.simpan == "gagal":
         kotak = "Kode responden belum terbentuk karena jawaban gagal disimpan."
     else:
         kotak = "Membuat kode responden…"
-    with st.container(border=True):
-        st.markdown(kotak)
+    htm(f"<div class='tiket'>🎫 {kotak}</div>")
+    st.write("")
+
+    aksi = []
+    for k in t["tombol"]:
+        if k == "faskes":
+            aksi.append(("🏥 Cari fasilitas kesehatan", "hasil_faskes", "primary",
+                         lambda: ke("faskes", asal="hasil" if baru else "hasil-riwayat")))
+        elif k == "tips":
+            aksi.append(("🥗 Tips gizi seimbang" if h["level"] == "rendah" else "🥗 Tips pola makan", "hasil_tips", "secondary",
+                         lambda: ke("tips", asal="hasil" if baru else "hasil-riwayat")))
+        elif k == "selesai":
+            if baru:
+                def _selesai():
+                    kode_lama = ss.get("kode_terakhir", "")
+                    reset_state()
+                    ss.kode_terakhir = kode_lama
+                    ke("home")
+                aksi.append(("Selesai  ✓", "hasil_selesai", "primary", _selesai))
+            else:
+                aksi.append(("← Kembali ke riwayat", "hasil_kembali_rw", "primary", lambda: ke("riwayat")))
+    for c, (label, key, tipe, fn) in zip(st.columns(len(aksi)), aksi):
+        with c:
+            if tombol(label, key, tipe):
+                fn()
 
     st.caption("*Hasil ini adalah skrining risiko berdasarkan jawabanmu, bukan diagnosis. Status anemia hanya bisa dipastikan lewat "
                "pemeriksaan kadar Hb oleh tenaga kesehatan.*")
-    st.markdown("<div style='text-align:center;font-size:.88rem;color:#C2410C'>Jika kamu merasa hampir pingsan, sesak napas berat, "
-                "atau nyeri dada, segera ke IGD atau fasilitas kesehatan terdekat, atau hubungi <a href='tel:112'>112</a> (gratis).</div>",
-                unsafe_allow_html=True)
+    htm("<div class='darurat' style='text-align:center'>Jika kamu merasa hampir pingsan, sesak napas berat, atau nyeri dada, "
+        "segera ke IGD atau fasilitas kesehatan terdekat, atau hubungi <a href='tel:112'>112</a> (gratis).</div>")
 
     if baru:
         status = {"ok": "Jawaban tersimpan ✓", "lokal": "Mode uji lokal: jawaban tidak dikirim ke Google Sheets."}.get(ss.simpan, "")
         if ss.simpan == "gagal":
             st.error(f"Jawaban gagal disimpan. {ss.galat}")
-            if tombol("COBA SIMPAN LAGI", "ulang_simpan"):
+            if tombol("Coba simpan lagi", "ulang_simpan"):
                 kirim()
                 st.rerun()
         elif status:
@@ -597,48 +835,60 @@ def halaman_hasil_riwayat():
 
 
 def halaman_faskes():
-    topbar("Kontak Layanan Kesehatan")
-    st.subheader("Fasilitas kesehatan di Makassar")
-    st.caption("Pemeriksaan kadar Hb bisa dilakukan di Puskesmas, klinik kampus, laboratorium, atau rumah sakit.")
-    st.error("**Darurat?** Hubungi [**112**](tel:112) (Call Center Kota Makassar, gratis) atau langsung ke IGD terdekat.")
+    atur_lebar(1000)
+    topbar("Layanan Kesehatan")
+    banner("🏥", "Fasilitas kesehatan di Makassar",
+           "Pemeriksaan kadar Hb bisa dilakukan di Puskesmas, klinik kampus, laboratorium, atau rumah sakit.")
+    htm("<div class='darurat'>🚨 <b>Darurat?</b> Hubungi <a href='tel:112'>112</a> (Call Center Kota Makassar, gratis) "
+        "atau langsung ke IGD terdekat.</div>")
+    kol = st.columns(2)
     for i, f in enumerate(FASKES):
-        with st.container(border=True):
-            st.markdown(f"**{f['nama']}**")
-            st.caption(f["jenis"])
-            st.write(f["alamat"])
+        with kol[i % 2], kartu(f"faskes{i}"):
+            ikon = "🏨" if "Rumah sakit" in f["jenis"] else "🏥"
+            telp = ""
             if f["telp"]:
                 tel = "".join(c for c in f["telp"] if c.isdigit())
-                st.markdown(f"[📞 {f['telp']}](tel:{tel})")
-            st.link_button("📍 Lihat peta", "https://www.google.com/maps/search/?api=1&query=" + quote(f["nama"] + " Makassar"))
-    st.link_button("CARI PUSKESMAS TERDEKAT DI GOOGLE MAPS", URL_FASKES, type="primary", use_container_width=True)
-    if tombol(label_kembali(), "faskes_kembali"):
-        kembali_asal()
+                telp = f"<div class='alamat'>📞 <a href='tel:{tel}'>{html.escape(f['telp'])}</a></div>"
+            htm(f"""<div class='faskes-kepala'><div class='ik'>{ikon}</div><div><div class='judul-bagian'>{html.escape(f['nama'])}</div>
+                <span class='badge'>{html.escape(f['jenis'])}</span></div></div>
+                <div class='alamat'>📍 {html.escape(f['alamat'])}</div>{telp}""")
+            st.link_button("Lihat di peta", "https://www.google.com/maps/search/?api=1&query=" + quote(f["nama"] + " Makassar"),
+                           width="stretch")
+    k1, k2 = st.columns(2)
+    with k1:
+        st.link_button("📍 Cari Puskesmas terdekat", URL_FASKES, type="primary", width="stretch")
+    with k2:
+        if tombol(label_kembali(), "faskes_kembali"):
+            kembali_asal()
     st.caption("Data kontak per November 2026. Jam layanan bisa berubah, sebaiknya hubungi dulu sebelum datang.")
 
 
 def halaman_tips():
-    topbar("Tips Gizi Seimbang")
-    st.subheader("Tips mencegah anemia lewat pola makan")
-    kartu = [
-        ("🥩 Sumber zat besi", ["Utamakan zat besi hewani yang lebih mudah diserap: hati, daging merah, ikan, ayam, telur.",
-                                 "Sumber nabati: bayam, kangkung, daun kelor, kacang-kacangan, tempe, tahu."]),
-        ("🍊 Pasangkan dengan vitamin C", ["Makan buah seperti jeruk, jambu biji, pepaya, atau tomat bersama makanan utama untuk membantu penyerapan zat besi."]),
-        ("☕ Atur waktu minum teh dan kopi", ["Teh dan kopi menghambat penyerapan zat besi. Beri jeda sekitar 1–2 jam dari waktu makan."]),
-        ("🍽️ Makan teratur", ["Usahakan makan utama 3 kali sehari dan jangan sering melewatkan makan.",
-                              "Bila menjalani diet khusus atau vegetarian, konsultasikan menu dengan tenaga kesehatan."]),
-        ("💊 Tablet Tambah Darah (TTD)", ["Minum TTD sesuai anjuran petugas kesehatan. Untuk remaja putri dan wanita usia subur, program pemerintah menganjurkan 1 tablet per minggu.",
-                                           "Jangan minum TTD bersamaan dengan teh, kopi, atau susu."]),
+    atur_lebar(1000)
+    topbar("Tips Gizi")
+    banner("🥗", "Tips mencegah anemia lewat pola makan",
+           "Kebiasaan kecil yang dilakukan rutin bisa membantu menjaga kadar hemoglobin tetap normal.")
+    kartu_tips = [
+        ("🥩", "#FFF1F0", "Sumber zat besi", ["Utamakan zat besi hewani yang lebih mudah diserap: hati, daging merah, ikan, ayam, telur.",
+                                             "Sumber nabati: bayam, kangkung, daun kelor, kacang-kacangan, tempe, tahu."]),
+        ("🍊", "#FFF6E5", "Pasangkan dengan vitamin C", ["Makan buah seperti jeruk, jambu biji, pepaya, atau tomat bersama makanan utama untuk membantu penyerapan zat besi."]),
+        ("☕", "#F3EEE9", "Atur waktu minum teh dan kopi", ["Teh dan kopi menghambat penyerapan zat besi. Beri jeda sekitar 1–2 jam dari waktu makan."]),
+        ("🍽️", "#E8F6F6", "Makan teratur", ["Usahakan makan utama 3 kali sehari dan jangan sering melewatkan makan.",
+                                            "Bila menjalani diet khusus atau vegetarian, konsultasikan menu dengan tenaga kesehatan."]),
+        ("💊", "#EEF0FF", "Tablet Tambah Darah (TTD)", ["Minum TTD sesuai anjuran petugas kesehatan. Untuk remaja putri dan wanita usia subur, program pemerintah menganjurkan 1 tablet per minggu.",
+                                                       "Jangan minum TTD bersamaan dengan teh, kopi, atau susu."]),
     ]
-    for judul, butir in kartu:
-        with st.container(border=True):
-            st.markdown(f"**{judul}**")
-            st.markdown("\n".join(f"- {b}" for b in butir))
+    kol = st.columns(2)
+    for i, (ikon, latar, judul, butir) in enumerate(kartu_tips):
+        with kol[i % 2], kartu(f"tips{i}"):
+            li = "".join(f"<li>{html.escape(b)}</li>" for b in butir)
+            htm(f"""<div class='tips-kepala'><div class='ik' style='background:{latar}'>{ikon}</div>
+                <div class='judul-bagian'>{html.escape(judul)}</div></div><ul class='tips-isi'>{li}</ul>""")
     if tombol(label_kembali(), "tips_kembali"):
         kembali_asal()
 
 
 def cari_riwayat(kode):
-    import re
     kode = kode.strip().upper()
     rw = ss.rw
     rw["kode"] = kode
@@ -661,31 +911,39 @@ def halaman_riwayat():
     rw = ss.rw
     if not rw["kode"]:
         rw["kode"] = (ss.payload or {}).get("kode") or ss.get("kode_terakhir", "")
-    st.subheader("Lihat riwayat hasil skrining")
-    st.caption("Masukkan kode responden yang muncul di layar hasil skrining. Semua skrining dengan NIM yang sama otomatis tergabung di kode ini.")
-    kode = st.text_input("Kode responden", value=rw["kode"], placeholder="ANM-261118-AB12CD", key="rw_input")
-    if tombol("CARI", "rw_cari", "primary"):
-        cari_riwayat(kode)
-        st.rerun()
+    kiri, kanan = split()
+    with kiri:
+        panel("riwayat", "Riwayat hasil", "Pantau perkembangan hasil skriningmu",
+              "Semua skrining dengan NIM yang sama otomatis tergabung dalam satu kode responden.",
+              ["🎫 Pakai kode responden", "📈 Bandingkan hasil", "🔒 Tanpa data identitas"])
+    with kanan, kartu("riwayat"):
+        judul_kartu("Masukkan kode responden", "Kode muncul di layar hasil skrining, contoh <b>ANM-261118-AB12CD</b>.")
+        with st.form("rw_form", border=False):
+            kode = st.text_input("Kode responden", value=rw["kode"], placeholder="ANM-261118-AB12CD", key="rw_input")
+            cari = st.form_submit_button("🔍 Cari riwayat", type="primary", width="stretch")
+        if cari:
+            cari_riwayat(kode)
+            st.rerun()
 
-    if rw["status"] == "gagal":
-        st.markdown(f":red[{rw['pesan']}]")
-    elif rw["status"] == "ok" and not rw["data"]:
-        st.write("Belum ada hasil untuk kode ini.")
-    elif rw["status"] == "ok":
-        st.caption(f"{len(rw['data'])} hasil, terbaru di atas. Ketuk salah satu untuk melihat hasil lengkapnya.")
-        for i, r in enumerate(rw["data"]):
-            teks = f"{IKON.get(r['kategori'], '⚪')} {r['kategori']} · {r['waktu']} · Skor {r['skor']} dari {r['skorMaks']} ({fmt(float(r['persen']))}%)"
-            if tombol(teks, f"rw_{i}"):
-                j = r.get("j")
-                if not j or j.get("jk") not in SKOR_MAKS:
-                    rw.update(status="gagal", pesan="Detail hasil belum tersedia. Pastikan Code.gs sudah diperbarui dan dipasang sebagai versi baru.")
-                    st.rerun()
-                a = dict(j)
-                ss.lihat = {"h": hitung_hasil(a), "a": a, "waktu": r["waktu"]}
-                ke("hasil-riwayat")
-    if tombol(label_kembali(), "rw_kembali"):
-        kembali_asal()
+        if rw["status"] == "gagal":
+            st.error(rw["pesan"])
+        elif rw["status"] == "ok" and not rw["data"]:
+            st.info("Belum ada hasil untuk kode ini.")
+        elif rw["status"] == "ok":
+            st.caption(f"{len(rw['data'])} hasil, terbaru di atas. Ketuk salah satu untuk melihat hasil lengkapnya.")
+            for i, r in enumerate(rw["data"]):
+                teks = (f"{IKON.get(r['kategori'], '⚪')} **{r['kategori']}** · {r['waktu']}  \n"
+                        f"Skor {r['skor']} dari {r['skorMaks']} ({fmt(float(r['persen']))}%)")
+                if tombol(teks, f"rwitem_{i}"):
+                    j = r.get("j")
+                    if not j or j.get("jk") not in SKOR_MAKS:
+                        rw.update(status="gagal", pesan="Detail hasil belum tersedia. Pastikan Code.gs sudah diperbarui dan dipasang sebagai versi baru.")
+                        st.rerun()
+                    a = dict(j)
+                    ss.lihat = {"h": hitung_hasil(a), "a": a, "waktu": r["waktu"]}
+                    ke("hasil-riwayat")
+        if tombol(label_kembali(), "rw_kembali"):
+            kembali_asal()
 
 
 def _waktu(v):
@@ -712,31 +970,41 @@ def muat_rekap(pin):
 def halaman_admin():
     import pandas as pd
 
-    topbar("Dasbor Petugas")
     adm = ss.setdefault("adm", {"status": "", "pesan": "", "data": None, "pin": ""})
 
     if adm["status"] != "ok":
-        st.subheader("Masuk sebagai petugas")
-        with st.form("adm_login"):
-            pin = st.text_input("PIN petugas", type="password")
-            masuk = st.form_submit_button("MASUK", type="primary", use_container_width=True)
-        if masuk:
-            muat_rekap(pin)
-            st.rerun()
-        if adm["status"] == "gagal":
-            st.markdown(f":red[{html.escape(adm['pesan'])}]")
-        if tombol("KEMBALI KE BERANDA", "adm_home"):
-            st.query_params.clear()
-            ke("home")
+        topbar("Petugas")
+        kiri, kanan = split()
+        with kiri:
+            panel("admin", "Khusus petugas", "Dasbor rekap skrining anemia",
+                  "Pantau sebaran risiko anemia mahasiswa secara langsung. Data ditampilkan tanpa nama, NIM, dan kode responden.",
+                  ["📊 Grafik interaktif", "⬇️ Unduh CSV", "🔐 Dilindungi PIN"])
+        with kanan, kartu("admin"):
+            judul_kartu("Masuk sebagai petugas 🔐", "Masukkan PIN petugas untuk membuka dasbor.")
+            with st.form("adm_login", border=False):
+                pin = st.text_input("PIN petugas", type="password", placeholder="••••••")
+                masuk = st.form_submit_button("Masuk  →", type="primary", width="stretch")
+            if masuk:
+                muat_rekap(pin)
+                st.rerun()
+            if adm["status"] == "gagal":
+                st.error(adm["pesan"])
+            if tombol("← Kembali ke beranda", "adm_home"):
+                st.query_params.clear()
+                ke("home")
         return
 
+    atur_lebar(1180)
+    topbar("Dasbor Petugas")
     data = adm["data"]
     df = pd.DataFrame(data.get("rows") or [])
-    c1, c2 = st.columns(2)
-    if c1.button("↻ MUAT ULANG", use_container_width=True):
+    k0, k1, k2 = st.columns([3, 1, 1], vertical_alignment="center")
+    with k0:
+        judul_kartu("📊 Rekap skrining risiko anemia", "Data gabungan tanpa identitas responden.")
+    if k1.button("↻ Muat ulang", width="stretch"):
         muat_rekap(adm["pin"])
         st.rerun()
-    if c2.button("KELUAR", use_container_width=True):
+    if k2.button("Keluar", width="stretch"):
         ss.adm = {"status": "", "pesan": "", "data": None, "pin": ""}
         st.rerun()
 
@@ -748,14 +1016,14 @@ def halaman_admin():
     df["persen"] = pd.to_numeric(df["persen"], errors="coerce")
     df["imt"] = pd.to_numeric(df["imt"], errors="coerce")
 
-    # --- Filter ---
-    with st.expander("Filter", expanded=False):
-        prodi = st.multiselect("Prodi", sorted(df["prodi"].dropna().astype(str).unique()))
-        jk = st.multiselect("Jenis kelamin", sorted(df["jk"].dropna().astype(str).unique()))
+    with st.expander("🔎 Filter data", expanded=False):
+        f1, f2, f3 = st.columns(3)
+        prodi = f1.multiselect("Prodi", sorted(df["prodi"].dropna().astype(str).unique()))
+        jk = f2.multiselect("Jenis kelamin", sorted(df["jk"].dropna().astype(str).unique()))
         tgl = df["waktu"].dropna()
         rentang = None
         if not tgl.empty:
-            rentang = st.date_input("Rentang tanggal", (tgl.min().date(), tgl.max().date()))
+            rentang = f3.date_input("Rentang tanggal", (tgl.min().date(), tgl.max().date()))
     if prodi:
         df = df[df["prodi"].astype(str).isin(prodi)]
     if jk:
@@ -767,69 +1035,77 @@ def halaman_admin():
         st.info("Tidak ada data yang cocok dengan filter.")
         return
 
-    # --- Ringkasan ---
     n = len(df)
     lv = df["level"].value_counts()
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Responden", n)
-    for kol, key in ((k2, "rendah"), (k3, "sedang"), (k4, "tinggi")):
+    m = st.columns(5)
+    m[0].metric("👥 Responden", n)
+    for kol, key, ikon in ((m[1], "rendah", "🟢"), (m[2], "sedang", "🟠"), (m[3], "tinggi", "🔴")):
         j = int(lv.get(key, 0))
-        kol.metric(f"Risiko {key}", j, f"{j / n * 100:.0f}%", delta_color="off")
-    teks = f"Rata-rata skor risiko: {fmt(df['persen'].mean())}% · Rata-rata IMT: {fmt(df['imt'].mean())}"
-    if "segera" in df:
-        teks += f" · Perlu segera periksa: {int((df['segera'] == 'Ya').sum())}"
-    st.caption(teks)
+        kol.metric(f"{ikon} Risiko {key}", j, f"{j / n * 100:.0f}%", delta_color="off")
+    segera = int((df["segera"] == "Ya").sum()) if "segera" in df else 0
+    m[4].metric("⚠️ Perlu segera periksa", segera)
+    st.caption(f"Rata-rata skor risiko: {fmt(df['persen'].mean())}% · Rata-rata IMT: {fmt(df['imt'].mean())}")
 
-    # --- Grafik ---
     urut = ["rendah", "sedang", "tinggi"]
-    st.markdown("**Sebaran kategori risiko**")
-    st.bar_chart(pd.DataFrame({"Jumlah": [int(lv.get(k, 0)) for k in urut]},
-                              index=[k.capitalize() for k in urut]), color="#0E7C86")
+    warna = [WARNA[k] for k in urut]
+    g1, g2 = st.columns(2)
+    with g1, kartu("g_kategori"):
+        judul_bagian("🎯", "Sebaran kategori risiko")
+        label = [k.capitalize() for k in urut]
+        sebaran = pd.DataFrame({label[i]: [int(lv.get(k, 0)) if j == i else 0 for j in range(3)] for i, k in enumerate(urut)},
+                               index=label)
+        st.bar_chart(sebaran, color=warna, height=280)
+    with g2, kartu("g_jk"):
+        judul_bagian("⚧️", "Kategori risiko per jenis kelamin")
+        per_jk = pd.crosstab(df["jk"], df["level"]).reindex(columns=urut, fill_value=0)
+        per_jk.columns = [k.capitalize() for k in per_jk.columns]
+        st.bar_chart(per_jk, color=warna, height=280)
 
-    st.markdown("**Kategori risiko per prodi**")
-    per_prodi = pd.crosstab(df["prodi"], df["level"]).reindex(columns=urut, fill_value=0)
-    per_prodi.columns = [k.capitalize() for k in per_prodi.columns]
-    st.bar_chart(per_prodi, color=[WARNA[k] for k in urut], horizontal=True)
+    with kartu("g_prodi"):
+        judul_bagian("🎓", "Kategori risiko per prodi")
+        per_prodi = pd.crosstab(df["prodi"], df["level"]).reindex(columns=urut, fill_value=0)
+        per_prodi.columns = [k.capitalize() for k in per_prodi.columns]
+        st.bar_chart(per_prodi, color=warna, horizontal=True, height=max(220, 44 * len(per_prodi)))
 
-    st.markdown("**Kategori risiko per jenis kelamin**")
-    per_jk = pd.crosstab(df["jk"], df["level"]).reindex(columns=urut, fill_value=0)
-    per_jk.columns = [k.capitalize() for k in per_jk.columns]
-    st.bar_chart(per_jk, color=[WARNA[k] for k in urut])
-
+    g3, g4 = st.columns(2)
     harian = df.dropna(subset=["waktu"]).assign(Tanggal=lambda x: x["waktu"].map(lambda w: w.date()))
-    if not harian.empty:
-        st.markdown("**Responden per hari**")
-        st.line_chart(harian.groupby("Tanggal").size().rename("Responden"), color="#0E7C86")
+    with g3, kartu("g_harian"):
+        judul_bagian("📅", "Responden per hari")
+        if harian.empty:
+            st.caption("Belum ada data tanggal.")
+        else:
+            st.area_chart(harian.groupby("Tanggal").size().rename("Responden"), color="#14A3A8", height=260)
+    with g4, kartu("g_faktor"):
+        judul_bagian("🔍", "10 faktor risiko terbanyak")
+        faktor = df["faktor"].fillna("").astype(str).str.split(";").explode().str.strip()
+        faktor = faktor[faktor != ""].value_counts().head(10)
+        if faktor.empty:
+            st.caption("Belum ada faktor risiko tercatat.")
+        else:
+            st.dataframe(faktor.rename_axis("Faktor").reset_index(name="Jumlah"), hide_index=True, width="stretch",
+                         height=260, column_config={"Jumlah": st.column_config.ProgressColumn(
+                             "Jumlah", format="%d", min_value=0, max_value=int(faktor.max()))})
 
-    faktor = (df["faktor"].fillna("").astype(str).str.split(";").explode().str.strip())
-    faktor = faktor[faktor != ""].value_counts().head(10)
-    if not faktor.empty:
-        st.markdown("**10 faktor risiko terbanyak**")
-        st.dataframe(faktor.rename_axis("Faktor").reset_index(name="Jumlah"),
-                     hide_index=True, use_container_width=True)
-
-    # --- Tabel & unduh ---
-    with st.expander("Data responden (tanpa kode responden)"):
-        tampil_df = df.assign(waktu=df["waktu"].map(lambda w: w.strftime("%d-%m-%Y %H:%M") if w else ""))
-        st.dataframe(tampil_df, hide_index=True, use_container_width=True)
-        st.download_button("UNDUH CSV", tampil_df.to_csv(index=False).encode("utf-8"),
-                           "rekap-skrining-anemia.csv", "text/csv", use_container_width=True)
-    if data.get("sheetUrl"):
-        st.link_button("BUKA GOOGLE SHEETS", data["sheetUrl"], use_container_width=True)
+    with kartu("g_tabel"):
+        judul_bagian("🗂️", "Data responden (tanpa kode responden)")
+        tampil_df = df.assign(waktu=df["waktu"].map(lambda w: w.strftime("%d-%m-%Y %H:%M") if w else "")).rename(columns={
+            "waktu": "Waktu", "usia": "Usia", "jk": "Jenis kelamin", "prodi": "Prodi", "semester": "Semester", "imt": "IMT",
+            "hamil": "Hamil", "persen": "Skor (%)", "kategori": "Kategori", "level": "Level risiko", "segera": "Segera periksa",
+            "faktor": "Faktor risiko"})
+        st.dataframe(tampil_df, hide_index=True, width="stretch")
+        t1, t2 = st.columns(2)
+        with t1:
+            st.download_button("⬇️ Unduh CSV", tampil_df.to_csv(index=False).encode("utf-8"),
+                               "rekap-skrining-anemia.csv", "text/csv", width="stretch")
+        with t2:
+            if data.get("sheetUrl"):
+                st.link_button("📄 Buka Google Sheets", data["sheetUrl"], width="stretch")
 
 
 # =========================================================
-# 6. JALANKAN
+# 7. JALANKAN
 # =========================================================
-st.markdown("""
-<style>
-#MainMenu, footer {visibility: hidden;}
-.block-container, [data-testid="stMainBlockContainer"] {
-    max-width: 720px;
-    padding-top: 4.5rem !important;    /* beri ruang di bawah header Streamlit (Share/GitHub) */
-    padding-bottom: 1.5rem !important; /* default Streamlit ~10rem, terlalu jauh */
-}
-</style>""", unsafe_allow_html=True)
+htm(GAYA)
 
 HALAMAN = {
     "home": halaman_home, "form": halaman_form, "hasil": halaman_hasil, "hasil-riwayat": halaman_hasil_riwayat,
@@ -839,8 +1115,7 @@ if "admin" in st.query_params:  # dasbor petugas: buka URL aplikasi + ?admin
     ss.page = "admin"
 HALAMAN[ss.page]()
 
-st.markdown("<hr style='margin-top:2rem'><div style='text-align:center;font-size:.75rem;color:#5B6B6C'>"
-            "Aplikasi Skrining dalam Kesehatan Masyarakat · Tugas Akhir</div>", unsafe_allow_html=True)
+htm("<div class='kaki'>Aplikasi Skrining dalam Kesehatan Masyarakat · Tugas Akhir</div>")
 
 if ss.scroll:  # kembali ke atas setiap pindah halaman
     ss.scroll = False
