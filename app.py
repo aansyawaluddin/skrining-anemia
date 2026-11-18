@@ -694,7 +694,11 @@ def halaman_riwayat():
 st.markdown("""
 <style>
 #MainMenu, footer {visibility: hidden;}
-.block-container {max-width: 720px; padding-top: 1.2rem;}
+.block-container, [data-testid="stMainBlockContainer"] {
+    max-width: 720px;
+    padding-top: 4.5rem !important;    /* beri ruang di bawah header Streamlit (Share/GitHub) */
+    padding-bottom: 1.5rem !important; /* default Streamlit ~10rem, terlalu jauh */
+}
 </style>""", unsafe_allow_html=True)
 
 HALAMAN = {
